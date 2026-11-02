@@ -1,0 +1,6 @@
+{
+  "name": "Wealthdatas - Nigerian Identity & Verification Services Portal",
+  "description": "Premier Nigerian Identity and Verification Services Portal. Instant NIN and BVN premium slips, phone verifications, IPE clearances, modifications, and secure automated wallet funding.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

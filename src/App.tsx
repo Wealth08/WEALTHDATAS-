@@ -1,0 +1,164 @@
+import React, { useState } from 'react';
+import { AppProvider, useApp } from './context/AppContext';
+import { Sidebar } from './components/Sidebar';
+import { TopBar } from './components/TopBar';
+import { CustomerDashboard } from './components/CustomerDashboard';
+import { SupportAdminDashboard } from './components/SupportAdminDashboard';
+import { SuperAdminDashboard } from './components/SuperAdminDashboard';
+import { UserTicketsView } from './components/UserTicketsView';
+import { LandingHero } from './components/LandingHero';
+import { AddFundsModal } from './components/AddFundsModal';
+import { ServiceModal } from './components/ServiceModal';
+import { AuthModal } from './components/AuthModal';
+import { CreateTicketModal } from './components/CreateTicketModal';
+import { WhatsAppWidget } from './components/WhatsAppWidget';
+import { ServiceItem } from './types';
+
+function MainAppContent() {
+  const { 
+    currentUser, 
+    isAddFundsOpen, 
+    setIsAddFundsOpen, 
+    activeServiceForModal, 
+    setActiveServiceForModal,
+    services
+  } = useApp();
+
+  const [currentView, setCurrentView] = useState<string>('dashboard');
+  const [showLanding, setShowLanding] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isCreateTicketOpen, setIsCreateTicketOpen] = useState<boolean>(false);
+
+  // Map view IDs to page titles and filters
+  let viewTitle = 'Dashboard';
+  let categoryFilter = 'ALL';
+
+  if (currentView === 'nin_phone') {
+    viewTitle = 'NIN & Phone Verification';
+    categoryFilter = 'NIN';
+  } else if (currentView === 'phone_multiple') {
+    viewTitle = 'Phone Multiple Verification';
+    categoryFilter = 'NIN';
+  } else if (currentView === 'cac_services') {
+    viewTitle = 'Corporate Affairs Commission (CAC) Services';
+  } else if (currentView === 'bvn_verification') {
+    viewTitle = 'BVN Verification & Retrieval';
+    categoryFilter = 'BVN';
+  } else if (currentView === 'ipe_clearance') {
+    viewTitle = 'IPE Clearance Processing Queue';
+    categoryFilter = 'CLEARANCE';
+  } else if (currentView === 'validation') {
+    viewTitle = 'NIMC & NIBSS Validation';
+    categoryFilter = 'VALIDATION';
+  } else if (currentView === 'personalization') {
+    viewTitle = 'Personalization & Verifiable Slips';
+  } else if (currentView === 'tickets') {
+    viewTitle = 'Support Inquiries & Tickets';
+  } else if (currentView === 'support_desk') {
+    viewTitle = 'Support Desk Processing Queue';
+  } else if (currentView === 'super_admin') {
+    viewTitle = 'Super Admin Control Center';
+  }
+
+  // Handle direct navigation to service if clicked from specialized sidebar item
+  const handleNavigate = (view: string) => {
+    setCurrentView(view);
+    if (view === 'nin_phone') {
+      const s = services.find((srv) => srv.id === 'nin-by-phone');
+      if (s) setActiveServiceForModal(s);
+    } else if (view === 'bvn_verification') {
+      const s = services.find((srv) => srv.id === 'bvn-premium-slip');
+      if (s) setActiveServiceForModal(s);
+    } else if (view === 'ipe_clearance') {
+      const s = services.find((srv) => srv.id === 'ipe-clearance');
+      if (s) setActiveServiceForModal(s);
+    }
+  };
+
+  if (showLanding) {
+    return (
+      <>
+        <LandingHero
+          onEnterDashboard={() => setShowLanding(false)}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+        />
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+        />
+      </>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-white dark:bg-[#050505] text-neutral-900 dark:text-neutral-100 flex">
+      {/* Sidebar matching Image 1 */}
+      <Sidebar
+        currentView={currentView}
+        onNavigate={handleNavigate}
+        isOpenMobile={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 lg:pl-64 flex flex-col min-h-screen">
+        <TopBar
+          currentViewTitle={viewTitle}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onToggleLanding={() => setShowLanding(true)}
+        />
+
+        <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">
+          {currentView === 'support_desk' && <SupportAdminDashboard />}
+          {currentView === 'super_admin' && <SuperAdminDashboard />}
+          {currentView === 'tickets' && (
+            <UserTicketsView onOpenNewTicket={() => setIsCreateTicketOpen(true)} />
+          )}
+          {currentView !== 'support_desk' &&
+            currentView !== 'super_admin' &&
+            currentView !== 'tickets' && (
+              <CustomerDashboard
+                activeCategoryFilter={categoryFilter}
+                onSelectService={(s) => setActiveServiceForModal(s)}
+                onOpenAddFunds={() => setIsAddFundsOpen(true)}
+              />
+            )}
+        </main>
+      </div>
+
+      {/* Modals & Overlays */}
+      <AddFundsModal
+        isOpen={isAddFundsOpen}
+        onClose={() => setIsAddFundsOpen(false)}
+      />
+
+      <ServiceModal
+        service={activeServiceForModal}
+        onClose={() => setActiveServiceForModal(null)}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+      />
+
+      <CreateTicketModal
+        isOpen={isCreateTicketOpen}
+        onClose={() => setIsCreateTicketOpen(false)}
+      />
+
+      {/* Floating WhatsApp Widget matching Image 1 */}
+      <WhatsAppWidget />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <MainAppContent />
+    </AppProvider>
+  );
+}
