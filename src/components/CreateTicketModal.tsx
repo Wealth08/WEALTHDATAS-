@@ -14,14 +14,18 @@ export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ isOpen, on
   const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'>('MEDIUM');
   const [description, setDescription] = useState('');
   const [submittedNum, setSubmittedNum] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject.trim() || !description.trim()) return;
+    if (!subject.trim() || !description.trim() || busy) return;
+    setErrorMsg('');
+    setBusy(true);
 
-    const t = addTicket({
+    const t = await addTicket({
       userId: currentUser.id,
       userName: currentUser.name,
       userEmail: currentUser.email,
@@ -34,7 +38,14 @@ export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ isOpen, on
       description: description.trim(),
     });
 
+    setBusy(false);
+    if (!t || t.error) {
+      setErrorMsg(t?.error || 'Could not submit your ticket. Please try again.');
+      return;
+    }
     setSubmittedNum(t.ticketNumber);
+    setSubject('');
+    setDescription('');
   };
 
   return (
@@ -80,6 +91,11 @@ export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ isOpen, on
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+            {errorMsg && (
+              <div className="p-3 text-xs rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+                {errorMsg}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
@@ -143,7 +159,8 @@ export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ isOpen, on
 
             <button
               type="submit"
-              className="w-full py-3 px-4 rounded-xl bg-neutral-950 text-white dark:bg-white dark:text-black font-semibold text-xs hover:opacity-90 active:scale-[0.99] transition shadow-md flex items-center justify-center gap-2"
+              disabled={busy}
+              className="w-full py-3 px-4 rounded-xl bg-neutral-950 text-white dark:bg-white dark:text-black font-semibold text-xs hover:opacity-90 active:scale-[0.99] transition shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <Send className="w-3.5 h-3.5" />
               Submit Ticket to Support Team

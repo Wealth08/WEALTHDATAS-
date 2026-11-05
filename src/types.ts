@@ -15,6 +15,7 @@ export interface UserProfile {
     accountName: string;
   };
   createdAt: string;
+  isActive?: boolean;
 }
 
 export type ServiceType = 'instant' | 'async';
@@ -75,6 +76,7 @@ export interface VerificationResult {
   serviceId: string;
   trackingId: string;
   queryParam: string;
+  pdfBase64?: string;
   timestamp: string;
   data: {
     nin?: string;

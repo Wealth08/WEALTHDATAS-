@@ -45,15 +45,20 @@ export const SupportAdminDashboard: React.FC = () => {
     rejected: tickets.filter((t) => t.status === 'REJECTED').length,
   };
 
-  const handleProcessAction = (status: TicketStatus) => {
+  const handleProcessAction = async (status: TicketStatus) => {
     if (!selectedTicket) return;
 
-    updateTicketStatus(
+    const res = await updateTicketStatus(
       selectedTicket.id,
       status,
       resolutionNote.trim() || undefined,
       status === 'RESOLVED' ? `https://wealthdatas.ng/slips/approved_${selectedTicket.ticketNumber}.pdf` : undefined
     );
+
+    if (!res.success) {
+      alert(res.error || 'Could not update this ticket');
+      return;
+    }
 
     const msg =
       status === 'RESOLVED'

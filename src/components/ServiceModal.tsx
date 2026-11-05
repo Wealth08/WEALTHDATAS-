@@ -3,7 +3,10 @@ import { X, Search, FileText, CheckCircle2, AlertTriangle, Download, ArrowRight,
 import { useApp } from '../context/AppContext';
 import { ServiceItem, VerificationResult } from '../types';
 import { formatNaira, validateNIN, validateBVN, validatePhone } from '../utils/rules';
-import { generatePremiumSlipPDF } from '../utils/pdfGenerator';
+import { downloadBase64Pdf } from '../utils/downloadPdf';
+
+// Services that run through the provider (server-side). Everything else keeps the manual ticket flow.
+const PROVIDER_ASYNC = ['bvn-retrieval', 'ipe-clearance', 'nin-personalization'];
 
 interface ServiceModalProps {
   service: ServiceItem | null;
@@ -11,7 +14,7 @@ interface ServiceModalProps {
 }
 
 export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) => {
-  const { currentUser, debitWalletForService, addTicket, addVerificationResult, setIsAddFundsOpen } = useApp();
+  const { currentUser, runService, submitServiceTicket, setIsAddFundsOpen } = useApp();
 
   // Instant query state
   const [queryInput, setQueryInput] = useState('');
@@ -32,7 +35,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
   const isInstant = service.type === 'instant';
 
   // Handle instant search execution
-  const handleInstantSubmit = (e: React.FormEvent) => {
+  const handleInstantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -60,56 +63,20 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
       }
     }
 
-    // Check balance & debit wallet
-    const debit = debitWalletForService(
-      service,
-      `${service.title} lookup for query #${queryInput}`
-    );
+    // The server charges the wallet, asks the provider, and refunds automatically if it fails
+    setIsProcessing(true);
+    const res = await runService({ service, params: { query: queryInput } });
+    setIsProcessing(false);
 
-    if (!debit.success) {
-      setErrorMsg(debit.error || 'Insufficient funds');
+    if (!res.success || !res.result) {
+      setErrorMsg(res.error || 'Request failed');
       return;
     }
-
-    setIsProcessing(true);
-
-    // Simulate official NIMC/NIBSS API query roundtrip
-    setTimeout(() => {
-      const cleanNum = queryInput.replace(/\s+/g, '');
-      const mockResult: VerificationResult = {
-        serviceId: service.id,
-        trackingId: `WD-NIG-${Math.floor(100000000 + Math.random() * 900000000)}`,
-        queryParam: cleanNum,
-        timestamp: new Date().toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        }),
-        data: {
-          nin: isBVN ? undefined : cleanNum.length === 11 ? cleanNum : '54920193821',
-          bvn: isBVN ? cleanNum : '22481920491',
-          firstName: 'Chukwuma',
-          middleName: 'Emeka',
-          lastName: 'Okonkwo',
-          dob: '1992-08-14',
-          gender: 'Male',
-          phone: isPhoneSearch ? cleanNum : '08034567890',
-          address: 'Plot 14, Commercial Avenue, Sabo, Yaba',
-          lga: 'Lagos Mainland',
-          stateOfOrigin: 'Anambra',
-          residenceState: 'Lagos',
-          trackingNumber: `NIMC-APP-${Math.floor(1000000 + Math.random() * 9000000)}`,
-        },
-      };
-
-      setResult(mockResult);
-      addVerificationResult(mockResult);
-      setIsProcessing(false);
-    }, 1400);
+    setResult(res.result);
   };
 
-  // Handle async ticket submission
-  const handleAsyncSubmit = (e: React.FormEvent) => {
+  // Handle async ticket submission (the server debits the wallet and creates the ticket in one step)
+  const handleAsyncSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -118,54 +85,68 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
       return;
     }
 
+    if (PROVIDER_ASYNC.includes(service.id)) {
+      let params: Record<string, string>;
+      if (service.id === 'bvn-retrieval') {
+        const v = validatePhone(asyncIdNumber);
+        if (!v.valid) {
+          setErrorMsg(v.error || 'Invalid phone number');
+          return;
+        }
+        const parts = asyncFullName.trim().split(/\s+/);
+        if (parts.length < 2) {
+          setErrorMsg('Enter the first name and surname of the person the number is registered to');
+          return;
+        }
+        params = { phone: asyncIdNumber, first_name: parts[0], last_name: parts[parts.length - 1] };
+      } else {
+        if (!/^[A-Za-z0-9]{15}$/.test(asyncIdNumber.replace(/\s+/g, ''))) {
+          setErrorMsg('Tracking ID must be exactly 15 letters/numbers');
+          return;
+        }
+        params = { tracking_id: asyncIdNumber };
+      }
+
+      setIsProcessing(true);
+      const pr = await runService({ service, params });
+      setIsProcessing(false);
+      if (!pr.success) {
+        setErrorMsg(pr.error || 'Could not submit your request');
+        return;
+      }
+      setSubmittedTicketNumber(pr.ticketNumber || '');
+      setIsSubmittedTicket(true);
+      return;
+    }
+
     if (service.requiresDocumentUpload && uploadedFiles.length === 0) {
       setErrorMsg('Please upload at least one supporting document (Affidavit, ID, or Gazette)');
       return;
     }
 
-    // Debit wallet for async service
-    const debit = debitWalletForService(
+    setIsProcessing(true);
+    const res = await submitServiceTicket({
       service,
-      `${service.title} ticket submission for ref #${asyncIdNumber}`
-    );
+      fullName: asyncFullName,
+      idNumber: asyncIdNumber,
+      detail: asyncModificationDetail,
+      docs: uploadedFiles,
+    });
+    setIsProcessing(false);
 
-    if (!debit.success) {
-      setErrorMsg(debit.error || 'Insufficient funds');
+    if (!res.success) {
+      setErrorMsg(res.error || 'Could not submit your request');
       return;
     }
 
-    setIsProcessing(true);
-
-    setTimeout(() => {
-      const ticket = addTicket({
-        userId: currentUser.id,
-        userName: asyncFullName,
-        userEmail: currentUser.email,
-        userPhone: currentUser.phone,
-        serviceId: service.id,
-        serviceTitle: service.title,
-        type: 'SERVICE_REQUEST',
-        status: 'OPEN',
-        priority: 'HIGH',
-        subject: `${service.title} for ${asyncFullName}`,
-        description: asyncModificationDetail || `Request for ${service.title}. Ref ID: ${asyncIdNumber}`,
-        attachedDocs: uploadedFiles.map((f) => ({
-          name: f,
-          type: 'application/pdf',
-        })),
-      });
-
-      setSubmittedTicketNumber(ticket.ticketNumber);
-      setIsSubmittedTicket(true);
-      setIsProcessing(false);
-    }, 1000);
+    setSubmittedTicketNumber(res.ticketNumber || '');
+    setIsSubmittedTicket(true);
   };
 
   const handleDownloadPDF = () => {
     if (!result) return;
-    const isBVN = service.category === 'BVN';
-    const doc = generatePremiumSlipPDF(result, isBVN ? 'BVN' : 'NIN');
-    doc.save(`Wealthdatas_${isBVN ? 'BVN' : 'NIN'}_Premium_Slip_${result.queryParam}.pdf`);
+    const ok = downloadBase64Pdf(result.pdfBase64 || '', `Wealthdatas_${service.category}_Slip_${result.queryParam}.pdf`);
+    if (!ok) alert('The PDF is not available for this result.');
   };
 
   const handleSimulateFileUpload = () => {
@@ -351,12 +332,14 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
                     {result.data.address}
                   </span>
                 </div>
-                <div>
-                  <span className="text-neutral-400 block text-[11px]">State / LGA of Origin</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-300">
-                    {result.data.stateOfOrigin} State ({result.data.lga} LGA)
-                  </span>
-                </div>
+                {(result.data.stateOfOrigin || result.data.lga) && (
+                  <div>
+                    <span className="text-neutral-400 block text-[11px]">State / LGA of Origin</span>
+                    <span className="font-medium text-neutral-800 dark:text-neutral-300">
+                      {result.data.stateOfOrigin} State ({result.data.lga} LGA)
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -389,7 +372,9 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
           <form onSubmit={handleAsyncSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-                Applicant Full Legal Name
+                {service.id === 'bvn-retrieval'
+                  ? 'First Name and Surname Registered on the Phone Number'
+                  : 'Applicant Full Legal Name'}
               </label>
               <input
                 type="text"
@@ -402,12 +387,24 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
 
             <div>
               <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-                {service.category === 'BVN' ? 'BVN Number (11 Digits)' : 'NIN Number (11 Digits)'}
+                {service.id === 'bvn-retrieval'
+                  ? 'Registered Phone Number'
+                  : service.id === 'ipe-clearance' || service.id === 'nin-personalization'
+                  ? 'NIN Tracking ID (15 characters)'
+                  : service.category === 'BVN'
+                  ? 'BVN Number (11 Digits)'
+                  : 'NIN Number (11 Digits)'}
               </label>
               <input
                 type="text"
                 required
-                placeholder="11 digits"
+                placeholder={
+                  service.id === 'bvn-retrieval'
+                    ? 'e.g. 08012345678'
+                    : service.id === 'ipe-clearance' || service.id === 'nin-personalization'
+                    ? '15 letters/numbers'
+                    : '11 digits'
+                }
                 value={asyncIdNumber}
                 onChange={(e) => setAsyncIdNumber(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-sm font-mono tabular-nums"
@@ -420,7 +417,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
               </label>
               <textarea
                 rows={3}
-                required
+                required={!PROVIDER_ASYNC.includes(service.id)}
                 placeholder="State the requested correction (e.g. Correct surname from 'Okoko' to 'Okonkwo', or NIMC biometric error collision clearance code)."
                 value={asyncModificationDetail}
                 onChange={(e) => setAsyncModificationDetail(e.target.value)}
@@ -428,7 +425,8 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
               />
             </div>
 
-            {/* Document Upload Area */}
+            {/* Document Upload Area (manual services only; provider services need no documents) */}
+            {!PROVIDER_ASYNC.includes(service.id) && (
             <div>
               <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Required Proof Documents (Court Affidavit, Gazette, or Birth Certificate)
@@ -465,6 +463,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
                 </div>
               )}
             </div>
+            )}
 
             <button
               type="submit"

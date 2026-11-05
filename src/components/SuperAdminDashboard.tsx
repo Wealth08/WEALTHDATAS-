@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -11,7 +11,8 @@ import {
   Edit3, 
   Save, 
   History,
-  FileCheck2
+  FileCheck2,
+  UserPlus
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatNaira } from '../utils/rules';
@@ -24,10 +25,12 @@ export const SuperAdminDashboard: React.FC = () => {
     transactions, 
     creditWallet, 
     debitWalletManual,
-    currentUser
+    currentUser,
+    createStaffAccount,
+    setStaffActive
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'pricing' | 'wallets' | 'audit'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'pricing' | 'wallets' | 'audit' | 'staff'>('analytics');
 
   // Pricing edit state
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
@@ -40,6 +43,55 @@ export const SuperAdminDashboard: React.FC = () => {
   const [actionAmount, setActionAmount] = useState<string>('5000');
   const [auditNote, setAuditNote] = useState<string>('Customer manual bank transfer verified by Super Admin');
   const [walletFeedback, setWalletFeedback] = useState<string | null>(null);
+
+  // Wallet target defaults to the first account once the user list has loaded
+  useEffect(() => {
+    if (!targetUserId && allUsers[0]) setTargetUserId(allUsers[0].id);
+  }, [allUsers, targetUserId]);
+
+  // Staff account creation state
+  const staffUsers = allUsers.filter((u) => u.role !== 'USER');
+  const [staffName, setStaffName] = useState('');
+  const [staffEmail, setStaffEmail] = useState('');
+  const [staffPhone, setStaffPhone] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
+  const [staffBusy, setStaffBusy] = useState(false);
+  const [staffFeedback, setStaffFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleCreateStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffFeedback(null);
+    if (staffPassword.length < 8) {
+      setStaffFeedback({ ok: false, text: 'Password must be at least 8 characters' });
+      return;
+    }
+    setStaffBusy(true);
+    const res = await createStaffAccount({
+      name: staffName,
+      email: staffEmail,
+      phone: staffPhone,
+      password: staffPassword,
+    });
+    setStaffBusy(false);
+    if (!res.ok) {
+      setStaffFeedback({ ok: false, text: res.error || 'Could not create staff account' });
+      return;
+    }
+    setStaffFeedback({ ok: true, text: `Support account created for ${staffEmail.trim()}. Share the login details securely.` });
+    setStaffName('');
+    setStaffEmail('');
+    setStaffPhone('');
+    setStaffPassword('');
+  };
+
+  const handleToggleStaff = async (id: string, active: boolean) => {
+    setStaffFeedback(null);
+    const res = await setStaffActive(id, active);
+    setStaffFeedback({
+      ok: res.ok,
+      text: res.ok ? (active ? 'Account re-activated.' : 'Account deactivated.') : res.error || 'Action failed',
+    });
+  };
 
   // Analytics aggregations
   const totalDebited = transactions
@@ -56,16 +108,20 @@ export const SuperAdminDashboard: React.FC = () => {
 
   const netRevenue = Math.max(0, totalDebited - totalRefunded);
 
-  const handleSavePrice = (serviceId: string) => {
+  const handleSavePrice = async (serviceId: string) => {
     const p = parseFloat(editedPrice);
     if (isNaN(p) || p < 0) return;
-    updateServicePrice(serviceId, p);
+    const res = await updateServicePrice(serviceId, p);
+    if (!res.success) {
+      alert(res.error || 'Could not update the price');
+      return;
+    }
     setEditingServiceId(null);
     setSaveSuccessMsg(`Price updated for ${serviceId}`);
     setTimeout(() => setSaveSuccessMsg(null), 2500);
   };
 
-  const handleWalletOverrideSubmit = (e: React.FormEvent) => {
+  const handleWalletOverrideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(actionAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -78,10 +134,14 @@ export const SuperAdminDashboard: React.FC = () => {
     }
 
     if (walletActionType === 'CREDIT') {
-      creditWallet(amt, 'ADMIN_OVERRIDE', auditNote, targetUserId);
+      const credit = await creditWallet(amt, 'ADMIN_OVERRIDE', auditNote, targetUserId);
+      if (!credit.success) {
+        setWalletFeedback(`Error: ${credit.error}`);
+        return;
+      }
       setWalletFeedback(`Successfully credited ${formatNaira(amt)} to user wallet.`);
     } else {
-      const res = debitWalletManual(amt, auditNote, targetUserId);
+      const res = await debitWalletManual(amt, auditNote, targetUserId);
       if (!res.success) {
         setWalletFeedback(`Error: ${res.error}`);
         return;
@@ -171,6 +231,16 @@ export const SuperAdminDashboard: React.FC = () => {
           }`}
         >
           Audit Ledger ({transactions.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('staff')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition ${
+            activeTab === 'staff'
+              ? 'bg-white dark:bg-neutral-800 text-neutral-950 dark:text-white shadow-sm'
+              : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+          }`}
+        >
+          Staff Accounts ({staffUsers.length})
         </button>
       </div>
 
@@ -560,6 +630,109 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: STAFF ACCOUNTS (Super Admin only) */}
+      {activeTab === 'staff' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-5 p-6 rounded-3xl liquid-glass-card space-y-4">
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-neutral-700 dark:text-neutral-300" />
+              <h3 className="text-base font-bold text-neutral-900 dark:text-white">
+                Create Support Staff Account
+              </h3>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Staff sign in at <span className="font-mono">/staff-login</span>. Only you can create or deactivate staff accounts.
+            </p>
+
+            {staffFeedback && (
+              <div
+                className={`p-3 rounded-xl text-xs font-semibold border ${
+                  staffFeedback.ok
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50'
+                }`}
+              >
+                {staffFeedback.text}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateStaff} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Full name</label>
+                <input type="text" required value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="Staff full name" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Email address</label>
+                <input type="email" required value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} placeholder="staff@wealthdatas.ng" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Phone number</label>
+                <input type="tel" value={staffPhone} onChange={(e) => setStaffPhone(e.target.value)} placeholder="08012345678" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Temporary password (min 8 characters)</label>
+                <input type="text" required minLength={8} value={staffPassword} onChange={(e) => setStaffPassword(e.target.value)} placeholder="Set a strong temporary password" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono" />
+              </div>
+              <button
+                type="submit"
+                disabled={staffBusy}
+                className="w-full py-2.5 px-4 rounded-xl bg-neutral-950 text-white dark:bg-white dark:text-black font-semibold text-xs hover:opacity-90 transition shadow-sm disabled:opacity-50"
+              >
+                {staffBusy ? 'Creating...' : 'Create Support Account'}
+              </button>
+            </form>
+          </div>
+
+          <div className="lg:col-span-7 p-6 rounded-3xl liquid-glass-card space-y-4">
+            <h3 className="text-base font-bold text-neutral-900 dark:text-white">Staff Directory</h3>
+            <div className="space-y-2.5">
+              {staffUsers.map((u) => (
+                <div
+                  key={u.id}
+                  className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/70 border border-neutral-200 dark:border-neutral-800 flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-black font-bold text-xs flex items-center justify-center shrink-0">
+                      {u.avatarInitials}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-neutral-900 dark:text-white truncate">{u.name}</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-semibold font-mono">
+                          {u.role}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-neutral-400 block truncate">{u.email}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                        u.isActive === false
+                          ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                      }`}
+                    >
+                      {u.isActive === false ? 'DEACTIVATED' : 'ACTIVE'}
+                    </span>
+                    {u.role === 'SUPPORT_ADMIN' && u.id !== currentUser.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStaff(u.id, u.isActive === false)}
+                        className="px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 text-[11px] font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition"
+                      >
+                        {u.isActive === false ? 'Activate' : 'Deactivate'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

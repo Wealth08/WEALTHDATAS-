@@ -35,9 +35,13 @@ export const AddFundsModal: React.FC<AddFundsModalProps> = ({ isOpen, onClose })
     setSuccessMsg(null);
 
     // Simulate Paystack / Monnify webhook roundtrip (1.2s)
-    setTimeout(() => {
-      creditWallet(numAmount, channel, `Instant automated checkout via ${channel}`);
+    setTimeout(async () => {
+      const res = await creditWallet(numAmount, channel, `Instant automated checkout via ${channel}`);
       setIsProcessing(false);
+      if (!res.success) {
+        alert(res.error || 'Funding could not be completed');
+        return;
+      }
       setSuccessMsg(`Success! ${formatNaira(numAmount)} credited to your wallet.`);
       setTimeout(() => {
         setSuccessMsg(null);

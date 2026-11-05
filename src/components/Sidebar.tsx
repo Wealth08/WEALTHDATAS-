@@ -31,7 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
 }) => {
-  const { currentUser, setIsAddFundsOpen, switchRole } = useApp();
+  const { currentUser, setIsAddFundsOpen, signOut } = useApp();
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -188,44 +188,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
         </div>
 
-        {/* Quick Persona Switcher in Sidebar Footer for convenient testing */}
+        {/* Account footer */}
         <div className="p-4 border-t border-neutral-200/80 dark:border-neutral-800/80 bg-neutral-50/50 dark:bg-neutral-900/30">
           <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold uppercase tracking-wider mb-2">
-            <span>Fast Role Switch</span>
+            <span>Signed in as</span>
             <span className="font-mono text-neutral-500">{currentUser.role}</span>
           </div>
-          <div className="grid grid-cols-3 gap-1 text-[11px]">
-            <button
-              onClick={() => switchRole('USER')}
-              className={`py-1 rounded-lg border text-center font-medium transition ${
-                currentUser.role === 'USER'
-                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-black border-transparent'
-                  : 'border-neutral-200 dark:border-neutral-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              User
-            </button>
-            <button
-              onClick={() => switchRole('SUPPORT_ADMIN')}
-              className={`py-1 rounded-lg border text-center font-medium transition ${
-                currentUser.role === 'SUPPORT_ADMIN'
-                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-black border-transparent'
-                  : 'border-neutral-200 dark:border-neutral-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              Support
-            </button>
-            <button
-              onClick={() => switchRole('SUPER_ADMIN')}
-              className={`py-1 rounded-lg border text-center font-medium transition ${
-                currentUser.role === 'SUPER_ADMIN'
-                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-black border-transparent'
-                  : 'border-neutral-200 dark:border-neutral-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              Super
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              signOut();
+              onCloseMobile();
+            }}
+            className="w-full py-2 px-3 rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-500 hover:text-neutral-900 dark:hover:text-white text-xs font-medium transition flex items-center justify-center gap-1.5"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sign out
+          </button>
         </div>
       </aside>
     </>

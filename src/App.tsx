@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -12,6 +12,7 @@ import { ServiceModal } from './components/ServiceModal';
 import { AuthModal } from './components/AuthModal';
 import { CreateTicketModal } from './components/CreateTicketModal';
 import { WhatsAppWidget } from './components/WhatsAppWidget';
+import { StaffLogin } from './components/StaffLogin';
 import { ServiceItem } from './types';
 
 function MainAppContent() {
@@ -21,14 +22,33 @@ function MainAppContent() {
     setIsAddFundsOpen, 
     activeServiceForModal, 
     setActiveServiceForModal,
-    services
+    services,
+    isAuthenticated,
+    authLoading
   } = useApp();
+
+  const isStaff = currentUser.role === 'SUPPORT_ADMIN' || currentUser.role === 'SUPER_ADMIN';
+  const isSuper = currentUser.role === 'SUPER_ADMIN';
 
   const [currentView, setCurrentView] = useState<string>('dashboard');
   const [showLanding, setShowLanding] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isCreateTicketOpen, setIsCreateTicketOpen] = useState<boolean>(false);
+  const [path, setPath] = useState<string>(window.location.pathname);
+
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // Start on the dashboard whenever a different account signs in
+  useEffect(() => {
+    setCurrentView('dashboard');
+  }, [currentUser.id]);
+
+  const isStaffLoginPath = path.replace(/\/+$/, '') === '/staff-login';
 
   // Map view IDs to page titles and filters
   let viewTitle = 'Dashboard';
@@ -76,11 +96,35 @@ function MainAppContent() {
     }
   };
 
-  if (showLanding) {
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-[#050505] text-neutral-500 flex items-center justify-center text-xs font-medium">
+        Loading...
+      </div>
+    );
+  }
+
+  // Secure staff entrance: https://your-site/staff-login
+  if (isStaffLoginPath) {
+    if (isAuthenticated && isStaff) {
+      window.history.replaceState(null, '', '/');
+    } else {
+      return (
+        <StaffLogin
+          onSuccess={() => {
+            window.history.replaceState(null, '', '/');
+            setPath('/');
+          }}
+        />
+      );
+    }
+  }
+
+  if (showLanding || !isAuthenticated) {
     return (
       <>
         <LandingHero
-          onEnterDashboard={() => setShowLanding(false)}
+          onEnterDashboard={() => (isAuthenticated ? setShowLanding(false) : setIsAuthModalOpen(true))}
           onOpenAuth={() => setIsAuthModalOpen(true)}
         />
         <AuthModal
@@ -111,14 +155,14 @@ function MainAppContent() {
         />
 
         <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">
-          {currentView === 'support_desk' && <SupportAdminDashboard />}
-          {currentView === 'super_admin' && <SuperAdminDashboard />}
+          {currentView === 'support_desk' && isStaff && <SupportAdminDashboard />}
+          {currentView === 'super_admin' && isSuper && <SuperAdminDashboard />}
           {currentView === 'tickets' && (
             <UserTicketsView onOpenNewTicket={() => setIsCreateTicketOpen(true)} />
           )}
-          {currentView !== 'support_desk' &&
-            currentView !== 'super_admin' &&
-            currentView !== 'tickets' && (
+          {(!(currentView === 'support_desk' && isStaff) &&
+            !(currentView === 'super_admin' && isSuper) &&
+            currentView !== 'tickets') && (
               <CustomerDashboard
                 activeCategoryFilter={categoryFilter}
                 onSelectService={(s) => setActiveServiceForModal(s)}

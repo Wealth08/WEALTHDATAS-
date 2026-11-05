@@ -22,7 +22,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { ServiceItem } from '../types';
 import { formatNaira } from '../utils/rules';
-import { generatePremiumSlipPDF } from '../utils/pdfGenerator';
+import { downloadBase64Pdf } from '../utils/downloadPdf';
 
 interface CustomerDashboardProps {
   onSelectService: (service: ServiceItem) => void;
@@ -250,9 +250,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const isBVN = !!rec.data.bvn;
-                    const doc = generatePremiumSlipPDF(rec, isBVN ? 'BVN' : 'NIN');
-                    doc.save(`Wealthdatas_Slip_${rec.queryParam}.pdf`);
+                    const ok = downloadBase64Pdf(rec.pdfBase64 || '', `Wealthdatas_Slip_${rec.queryParam}.pdf`);
+                    if (!ok) alert('This slip is no longer available to download. Please run the verification again.');
                   }}
                   className="px-3.5 py-1.5 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-950 text-xs font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
                 >
