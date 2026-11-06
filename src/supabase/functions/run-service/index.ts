@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
         p_amount: charge.amount,
         p_reason: reason,
         p_original_ref: charge.reference,
+        p_service_id: serviceId,
       });
     };
 

@@ -35,7 +35,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   onOpenAddFunds,
   activeCategoryFilter = 'ALL',
 }) => {
-  const { currentUser, services, transactions, recentVerifications } = useApp();
+  const { currentUser, services, transactions, recentVerifications, paymentAccount } = useApp();
   const [copiedDVA, setCopiedDVA] = useState(false);
   const [displayBalance, setDisplayBalance] = useState(currentUser.walletBalance);
 
@@ -63,7 +63,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   }, [currentUser.walletBalance]);
 
   const handleCopyDVA = () => {
-    navigator.clipboard.writeText(currentUser.virtualAccount.accountNumber);
+    if (!paymentAccount) return;
+    navigator.clipboard.writeText(paymentAccount.accountNumber);
     setCopiedDVA(true);
     setTimeout(() => setCopiedDVA(false), 2000);
   };
@@ -133,14 +134,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           </div>
           <div>
             <span className="text-neutral-400 text-[11px] block font-medium">
-              Permanent Automated Funding Account (Monnify / Paystack DVA)
+              Wealthdatas Funding Account (transfer, then tap Add Funds to confirm)
             </span>
             <div className="flex items-center gap-2 font-mono font-bold text-neutral-900 dark:text-white text-sm">
-              <span>{currentUser.virtualAccount.bankName}:</span>
-              <span className="tracking-wider">{currentUser.virtualAccount.accountNumber}</span>
+              <span>{paymentAccount ? paymentAccount.bank : 'Funding account'}:</span>
+              <span className="tracking-wider">{paymentAccount ? paymentAccount.accountNumber : 'Not set up yet'}</span>
             </div>
             <span className="text-[10px] text-neutral-500">
-              Account Name: {currentUser.virtualAccount.accountName}
+              Account Name: {paymentAccount ? paymentAccount.accountName : '-'}
             </span>
           </div>
         </div>

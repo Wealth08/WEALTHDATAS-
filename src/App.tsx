@@ -13,6 +13,7 @@ import { AuthModal } from './components/AuthModal';
 import { CreateTicketModal } from './components/CreateTicketModal';
 import { WhatsAppWidget } from './components/WhatsAppWidget';
 import { StaffLogin } from './components/StaffLogin';
+import { isStaffPath } from './utils/staffPath';
 import { ServiceItem } from './types';
 
 function MainAppContent() {
@@ -48,7 +49,7 @@ function MainAppContent() {
     setCurrentView('dashboard');
   }, [currentUser.id]);
 
-  const isStaffLoginPath = path.replace(/\/+$/, '') === '/staff-login';
+  const isStaffLoginPath = isStaffPath(path);
 
   // Map view IDs to page titles and filters
   let viewTitle = 'Dashboard';

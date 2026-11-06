@@ -1,7 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { UserProfile, ServiceItem, Transaction, SupportTicket, VerificationResult } from '../types';
+import {
+  UserProfile,
+  ServiceItem,
+  Transaction,
+  SupportTicket,
+  VerificationResult,
+  PaymentAccount,
+  FundingRequest,
+  ProfitSummary,
+} from '../types';
 import { DEFAULT_SERVICES } from '../utils/rules';
 
 /* ------------------------------------------------------------------ */
@@ -114,6 +123,23 @@ const rowToTicket = (r: any): SupportTicket => ({
   updatedAt: r.updated_at,
 });
 
+const rowToFunding = (r: any): FundingRequest => ({
+  id: r.id,
+  userId: r.user_id,
+  userName: r.user_name,
+  userEmail: r.user_email,
+  amount: Number(r.amount),
+  senderName: r.sender_name,
+  bank: r.bank || undefined,
+  note: r.note || undefined,
+  reference: r.reference,
+  status: r.status,
+  amountCredited: r.amount_credited !== null && r.amount_credited !== undefined ? Number(r.amount_credited) : undefined,
+  reviewNote: r.review_note || undefined,
+  createdAt: r.created_at,
+  reviewedAt: r.reviewed_at || undefined,
+});
+
 const isStaffRole = (role: UserProfile['role']) => role === 'SUPPORT_ADMIN' || role === 'SUPER_ADMIN';
 
 async function fetchProfile(userId: string): Promise<UserProfile | null> {
@@ -189,6 +215,19 @@ interface AppContextType {
     service: ServiceItem;
     params: Record<string, string>;
   }) => Promise<ActionResult & { kind?: 'instant' | 'async'; result?: VerificationResult; ticketNumber?: string }>;
+  paymentAccount: PaymentAccount | null;
+  fundingRequests: FundingRequest[];
+  createFundingRequest: (input: {
+    amount: number;
+    senderName: string;
+    bank: string;
+    note: string;
+  }) => Promise<ActionResult & { reference?: string }>;
+  reviewFundingRequest: (id: string, approve: boolean, amountReceived?: number, note?: string) => Promise<ActionResult>;
+  setPaymentAccount: (input: PaymentAccount) => Promise<ActionResult>;
+  serviceCosts: Record<string, number>;
+  setServiceCost: (serviceId: string, cost: number) => Promise<ActionResult>;
+  profit: ProfitSummary | null;
   creditWallet: (amount: number, channel?: Transaction['channel'], note?: string, targetUserId?: string) => Promise<ActionResult>;
   debitWalletManual: (amount: number, note: string, targetUserId: string) => Promise<ActionResult>;
   allUsers: UserProfile[];
@@ -221,6 +260,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [recentVerifications, setRecentVerifications] = useState<VerificationResult[]>([]);
+  const [paymentAccount, setPaymentAccountState] = useState<PaymentAccount | null>(null);
+  const [fundingRequests, setFundingRequests] = useState<FundingRequest[]>([]);
+  const [serviceCosts, setServiceCosts] = useState<Record<string, number>>({});
+  const [profit, setProfit] = useState<ProfitSummary | null>(null);
   const [isAddFundsOpen, setIsAddFundsOpen] = useState(false);
   const [activeServiceForModal, setActiveServiceForModal] = useState<ServiceItem | null>(null);
 
@@ -254,6 +297,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransactions([]);
     setTickets([]);
     setRecentVerifications([]);
+    setPaymentAccountState(null);
+    setFundingRequests([]);
+    setServiceCosts({});
+    setProfit(null);
   };
 
   // ---- Session listener ----
@@ -306,7 +353,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!me) return;
     const staff = isStaffRole(me.role);
 
-    const [svc, tx, tk, own, users] = await Promise.all([
+    const isSuper = me.role === 'SUPER_ADMIN';
+    const [svc, tx, tk, own, users, setg, fr, costs, prof] = await Promise.all([
       supabase.from('services').select('*').order('sort_order'),
       supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('tickets').select('*').order('created_at', { ascending: false }).limit(500),
@@ -314,6 +362,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       staff
         ? supabase.from('profiles').select('*').order('created_at', { ascending: false })
         : Promise.resolve(null),
+      supabase.from('settings').select('value').eq('key', 'payment_account').maybeSingle(),
+      supabase.from('funding_requests').select('*').order('created_at', { ascending: false }).limit(200),
+      isSuper ? supabase.from('service_costs').select('*') : Promise.resolve(null),
+      isSuper ? supabase.rpc('profit_summary') : Promise.resolve(null),
     ]);
 
     if (!own.error) {
@@ -331,6 +383,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (tx.data) setTransactions(tx.data.map(rowToTransaction));
     if (tk.data) setTickets(tk.data.map(rowToTicket));
     if (users && users.data) setDbUsers((users.data as ProfileRow[]).map(rowToProfile));
+    setPaymentAccountState((setg.data?.value as PaymentAccount) ?? null);
+    if (fr.data) setFundingRequests(fr.data.map(rowToFunding));
+    if (costs && costs.data) {
+      const m: Record<string, number> = {};
+      costs.data.forEach((c: any) => (m[c.service_id] = Number(c.cost_price)));
+      setServiceCosts(m);
+    }
+    if (prof && prof.data && prof.data.success) {
+      const pw = (w: any) => ({ revenue: Number(w.revenue), cost: Number(w.cost), sales: Number(w.sales) });
+      setProfit({
+        today: pw(prof.data.today),
+        last7: pw(prof.data.last7),
+        last30: pw(prof.data.last30),
+        allTime: pw(prof.data.allTime),
+        byService: (prof.data.byService || []).map((b: any) => ({
+          serviceId: b.service_id,
+          sales: Number(b.sales),
+          revenue: Number(b.revenue),
+          cost: Number(b.cost),
+        })),
+      });
+    }
   }, []);
 
   // Load on login, then keep fresh (every 20 seconds and whenever the tab regains focus)
@@ -570,6 +644,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: res.success, error: res.error };
   };
 
+  // ---- Manual bank-transfer funding + profit tracking ----
+  const createFundingRequest: AppContextType['createFundingRequest'] = async ({ amount, senderName, bank, note }) => {
+    const res = await rpc('create_funding_request', {
+      p_amount: amount,
+      p_sender_name: senderName,
+      p_bank: bank,
+      p_note: note,
+    });
+    await refreshData();
+    return { success: res.success, error: res.error, reference: res.data?.reference };
+  };
+
+  const reviewFundingRequest: AppContextType['reviewFundingRequest'] = async (id, approve, amountReceived, note) => {
+    const res = await rpc('review_funding_request', {
+      p_id: id,
+      p_approve: approve,
+      p_amount_received: amountReceived ?? null,
+      p_note: note ?? null,
+    });
+    await refreshData();
+    return { success: res.success, error: res.error };
+  };
+
+  const setPaymentAccount: AppContextType['setPaymentAccount'] = async (acc) => {
+    const res = await rpc('admin_set_payment_account', {
+      p_bank: acc.bank,
+      p_account_number: acc.accountNumber,
+      p_account_name: acc.accountName,
+      p_note: acc.note,
+    });
+    await refreshData();
+    return { success: res.success, error: res.error };
+  };
+
+  const setServiceCost: AppContextType['setServiceCost'] = async (serviceId, cost) => {
+    const res = await rpc('admin_set_service_cost', { p_service_id: serviceId, p_cost: cost });
+    await refreshData();
+    return { success: res.success, error: res.error };
+  };
+
   const addVerificationResult = (result: VerificationResult) => {
     setRecentVerifications((prev) => [result, ...prev]);
   };
@@ -598,6 +712,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTicketStatus,
         debitWalletForService,
         runService,
+        paymentAccount,
+        fundingRequests,
+        createFundingRequest,
+        reviewFundingRequest,
+        setPaymentAccount,
+        serviceCosts,
+        setServiceCost,
+        profit,
         creditWallet,
         debitWalletManual,
         allUsers,

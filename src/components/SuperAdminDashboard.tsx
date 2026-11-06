@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { STAFF_PATH } from '../utils/staffPath';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -27,10 +28,17 @@ export const SuperAdminDashboard: React.FC = () => {
     debitWalletManual,
     currentUser,
     createStaffAccount,
-    setStaffActive
+    setStaffActive,
+    paymentAccount,
+    fundingRequests,
+    reviewFundingRequest,
+    setPaymentAccount,
+    serviceCosts,
+    setServiceCost,
+    profit
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'pricing' | 'wallets' | 'audit' | 'staff'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'pricing' | 'wallets' | 'audit' | 'staff' | 'funding' | 'profit'>('analytics');
 
   // Pricing edit state
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
@@ -92,6 +100,68 @@ export const SuperAdminDashboard: React.FC = () => {
       text: res.ok ? (active ? 'Account re-activated.' : 'Account deactivated.') : res.error || 'Action failed',
     });
   };
+
+  // ---- Funding requests + payment account ----
+  const pendingFunding = fundingRequests.filter((r) => r.status === 'PENDING');
+  const reviewedFunding = fundingRequests.filter((r) => r.status !== 'PENDING').slice(0, 15);
+  const [acctBank, setAcctBank] = useState('');
+  const [acctNumber, setAcctNumber] = useState('');
+  const [acctName, setAcctName] = useState('');
+  const [acctNote, setAcctNote] = useState('');
+  const [fundFeedback, setFundFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const [receivedAmounts, setReceivedAmounts] = useState<Record<string, string>>({});
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (paymentAccount) {
+      setAcctBank(paymentAccount.bank);
+      setAcctNumber(paymentAccount.accountNumber);
+      setAcctName(paymentAccount.accountName);
+      setAcctNote(paymentAccount.note || '');
+    }
+  }, [paymentAccount]);
+
+  const handleSaveAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await setPaymentAccount({
+      bank: acctBank,
+      accountNumber: acctNumber.trim(),
+      accountName: acctName,
+      note: acctNote,
+    });
+    setFundFeedback({ ok: res.success, text: res.success ? 'Funding account saved. Customers now see it.' : res.error || 'Could not save' });
+  };
+
+  const handleReview = async (id: string, approve: boolean, requested: number) => {
+    setFundFeedback(null);
+    const received = parseFloat(receivedAmounts[id] ?? String(requested));
+    const res = await reviewFundingRequest(id, approve, approve ? received : undefined, reviewNotes[id]);
+    setFundFeedback({
+      ok: res.success,
+      text: res.success ? (approve ? 'Payment approved and wallet credited.' : 'Request rejected.') : res.error || 'Action failed',
+    });
+  };
+
+  // ---- Cost prices + profit ----
+  const [costInputs, setCostInputs] = useState<Record<string, string>>({});
+  const [costFeedback, setCostFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const handleSaveCost = async (serviceId: string) => {
+    const v = parseFloat(costInputs[serviceId] ?? String(serviceCosts[serviceId] ?? 0));
+    if (isNaN(v) || v < 0) return;
+    const res = await setServiceCost(serviceId, v);
+    setCostFeedback({ ok: res.success, text: res.success ? 'Cost saved.' : res.error || 'Could not save' });
+  };
+  const profitCard = (label: string, w?: { revenue: number; cost: number; sales: number }) => (
+    <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/70 border border-neutral-200 dark:border-neutral-800">
+      <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold block">{label}</span>
+      <span className="text-xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums block mt-1">
+        {formatNaira((w?.revenue || 0) - (w?.cost || 0))}
+      </span>
+      <span className="text-[11px] text-neutral-500 block mt-1">
+        Sales {formatNaira(w?.revenue || 0)} - Cost {formatNaira(w?.cost || 0)} ({w?.sales || 0} sold)
+      </span>
+    </div>
+  );
 
   // Analytics aggregations
   const totalDebited = transactions
@@ -241,6 +311,26 @@ export const SuperAdminDashboard: React.FC = () => {
           }`}
         >
           Staff Accounts ({staffUsers.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('funding')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition ${
+            activeTab === 'funding'
+              ? 'bg-white dark:bg-neutral-800 text-neutral-950 dark:text-white shadow-sm'
+              : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+          }`}
+        >
+          Funding ({pendingFunding.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('profit')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition ${
+            activeTab === 'profit'
+              ? 'bg-white dark:bg-neutral-800 text-neutral-950 dark:text-white shadow-sm'
+              : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+          }`}
+        >
+          Profit & Costs
         </button>
       </div>
 
@@ -645,7 +735,7 @@ export const SuperAdminDashboard: React.FC = () => {
               </h3>
             </div>
             <p className="text-xs text-neutral-500">
-              Staff sign in at <span className="font-mono">/staff-login</span>. Only you can create or deactivate staff accounts.
+              Staff sign in at <span className="font-mono">{STAFF_PATH}</span> on your site. Only you can create or deactivate staff accounts.
             </p>
 
             {staffFeedback && (
@@ -732,6 +822,156 @@ export const SuperAdminDashboard: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: FUNDING (verify bank transfers, set the account customers pay into) */}
+      {activeTab === 'funding' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-5 p-6 rounded-3xl liquid-glass-card space-y-4">
+            <h3 className="text-base font-bold text-neutral-900 dark:text-white">Funding Account (customers pay into this)</h3>
+            <p className="text-xs text-neutral-500">Use a bank account you own and can check. Customers see exactly these details.</p>
+            <form onSubmit={handleSaveAccount} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Bank name</label>
+                <input type="text" required value={acctBank} onChange={(e) => setAcctBank(e.target.value)} placeholder="e.g. Access Bank" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Account number (10 digits)</label>
+                <input type="text" required inputMode="numeric" maxLength={10} value={acctNumber} onChange={(e) => setAcctNumber(e.target.value.replace(/\D/g, ''))} placeholder="0123456789" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Account name</label>
+                <input type="text" required value={acctName} onChange={(e) => setAcctName(e.target.value)} placeholder="Name on the account" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Note to customers (optional)</label>
+                <input type="text" value={acctNote} onChange={(e) => setAcctNote(e.target.value)} placeholder="e.g. Use your email as the narration" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs" />
+              </div>
+              <button type="submit" className="w-full py-2.5 px-4 rounded-xl bg-neutral-950 text-white dark:bg-white dark:text-black font-semibold text-xs hover:opacity-90 transition shadow-sm">
+                Save Funding Account
+              </button>
+            </form>
+          </div>
+
+          <div className="lg:col-span-7 p-6 rounded-3xl liquid-glass-card space-y-4">
+            <h3 className="text-base font-bold text-neutral-900 dark:text-white">Payments Waiting for Confirmation ({pendingFunding.length})</h3>
+            <p className="text-xs text-neutral-500">Check your bank app first. Approve only money you can see in the account. Never rely on a screenshot.</p>
+
+            {fundFeedback && (
+              <div className={`p-3 rounded-xl text-xs font-semibold border ${fundFeedback.ok ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50'}`}>
+                {fundFeedback.text}
+              </div>
+            )}
+
+            {pendingFunding.length === 0 && <p className="text-xs text-neutral-400">No payments waiting.</p>}
+            <div className="space-y-3">
+              {pendingFunding.map((r) => (
+                <div key={r.id} className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900/70 border border-neutral-200 dark:border-neutral-800 space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-neutral-900 dark:text-white">{r.userName} <span className="font-normal text-neutral-400">({r.userEmail})</span></span>
+                    <span className="font-mono font-bold text-neutral-900 dark:text-white">{formatNaira(r.amount)}</span>
+                  </div>
+                  <div className="text-[11px] text-neutral-500 space-y-0.5">
+                    <p>Ref: <span className="font-mono">{r.reference}</span> - {new Date(r.createdAt).toLocaleString()}</p>
+                    <p>Paid from: {r.senderName}{r.bank ? ` (${r.bank})` : ''}</p>
+                    {r.note && <p>Bank reference: <span className="font-mono">{r.note}</span></p>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-neutral-400 mb-1">Amount you actually received (₦)</label>
+                      <input type="number" min="1" value={receivedAmounts[r.id] ?? String(r.amount)} onChange={(e) => setReceivedAmounts((p) => ({ ...p, [r.id]: e.target.value }))} className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-neutral-400 mb-1">Note (required to reject)</label>
+                      <input type="text" value={reviewNotes[r.id] ?? ''} onChange={(e) => setReviewNotes((p) => ({ ...p, [r.id]: e.target.value }))} placeholder="e.g. Not found in bank" className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => handleReview(r.id, true, r.amount)} className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition">
+                      Approve and Credit Wallet
+                    </button>
+                    <button type="button" onClick={() => handleReview(r.id, false, r.amount)} className="px-4 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-semibold text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 transition">
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {reviewedFunding.length > 0 && (
+              <div className="pt-2 border-t border-neutral-200/80 dark:border-neutral-800">
+                <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-2 mt-3">Recently reviewed</p>
+                <div className="space-y-1.5">
+                  {reviewedFunding.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between text-[11px] text-neutral-500">
+                      <span className="font-mono">{r.reference} - {r.userName}</span>
+                      <span>
+                        {r.status === 'APPROVED' ? `Credited ${formatNaira(r.amountCredited || 0)}` : 'Rejected'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: PROFIT & COSTS (only the Super Admin can see these) */}
+      {activeTab === 'profit' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {profitCard('Profit today', profit?.today)}
+            {profitCard('Last 7 days', profit?.last7)}
+            {profitCard('Last 30 days', profit?.last30)}
+            {profitCard('All time', profit?.allTime)}
+          </div>
+
+          <div className="p-6 rounded-3xl liquid-glass-card space-y-4">
+            <h3 className="text-base font-bold text-neutral-900 dark:text-white">What each service costs you</h3>
+            <p className="text-xs text-neutral-500">
+              Enter what the provider charges YOU for each service. Customers never see these numbers. Profit is the selling price minus this cost, and refunds reverse both.
+            </p>
+            {costFeedback && (
+              <div className={`p-3 rounded-xl text-xs font-semibold border ${costFeedback.ok ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50'}`}>
+                {costFeedback.text}
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-neutral-400 border-b border-neutral-200/80 dark:border-neutral-800">
+                    <th className="py-2 pr-3 font-semibold">Service</th>
+                    <th className="py-2 pr-3 font-semibold">You sell at</th>
+                    <th className="py-2 pr-3 font-semibold">Your cost</th>
+                    <th className="py-2 pr-3 font-semibold">Profit each</th>
+                    <th className="py-2 font-semibold"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {services.map((svc) => {
+                    const cost = serviceCosts[svc.id] ?? 0;
+                    return (
+                      <tr key={svc.id} className="border-b border-neutral-100 dark:border-neutral-800/70">
+                        <td className="py-2.5 pr-3 font-semibold text-neutral-900 dark:text-white">{svc.title}</td>
+                        <td className="py-2.5 pr-3 font-mono tabular-nums">{formatNaira(svc.price)}</td>
+                        <td className="py-2.5 pr-3">
+                          <input type="number" min="0" step="1" value={costInputs[svc.id] ?? String(cost)} onChange={(e) => setCostInputs((p) => ({ ...p, [svc.id]: e.target.value }))} className="w-28 p-2 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-mono" />
+                        </td>
+                        <td className="py-2.5 pr-3 font-mono tabular-nums text-emerald-600 dark:text-emerald-400">{formatNaira(svc.price - cost)}</td>
+                        <td className="py-2.5 text-right">
+                          <button type="button" onClick={() => handleSaveCost(svc.id)} className="px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 text-[11px] font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800 transition">
+                            Save
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

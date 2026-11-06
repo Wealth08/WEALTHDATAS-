@@ -40,7 +40,7 @@ export interface Transaction {
   status: 'SUCCESS' | 'PENDING' | 'FAILED';
   description: string;
   reference: string;
-  channel?: 'VIRTUAL_ACCOUNT' | 'CARD' | 'USSD' | 'ADMIN_OVERRIDE' | 'SYSTEM_REFUND';
+  channel?: 'VIRTUAL_ACCOUNT' | 'CARD' | 'USSD' | 'ADMIN_OVERRIDE' | 'SYSTEM_REFUND' | 'BANK_TRANSFER';
   createdAt: string;
   auditNote?: string;
   adminId?: string;
@@ -94,4 +94,42 @@ export interface VerificationResult {
     trackingNumber: string;
     photoUrl?: string;
   };
+}
+
+export interface PaymentAccount {
+  bank: string;
+  accountNumber: string;
+  accountName: string;
+  note: string;
+}
+
+export interface FundingRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  amount: number;
+  senderName: string;
+  bank?: string;
+  note?: string;
+  reference: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  amountCredited?: number;
+  reviewNote?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface ProfitWindow {
+  revenue: number;
+  cost: number;
+  sales: number;
+}
+
+export interface ProfitSummary {
+  today: ProfitWindow;
+  last7: ProfitWindow;
+  last30: ProfitWindow;
+  allTime: ProfitWindow;
+  byService: Array<{ serviceId: string; sales: number; revenue: number; cost: number }>;
 }
