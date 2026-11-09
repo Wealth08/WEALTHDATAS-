@@ -9,7 +9,7 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { signUp, signIn } = useApp();
+  const { signUp, signIn, resendConfirmation } = useApp();
   const [tab, setTab] = useState<'signin' | 'signup'>('signup');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -21,6 +21,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showResend, setShowResend] = useState(false);
 
   if (!isOpen) return null;
 
@@ -41,6 +42,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     e.preventDefault();
     setErrorMsg('');
     setInfoMsg('');
+    setShowResend(false);
 
     if (tab === 'signup') {
       if (!fullName.trim()) {
@@ -69,7 +71,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         return;
       }
       if (res.needsConfirmation) {
-        setInfoMsg('Account created. Check your email and click the confirmation link, then sign in.');
+        setInfoMsg(
+          `We sent a confirmation link to ${email.trim()}. Click it to activate your account, then sign in here.`
+        );
+        setShowResend(true);
         setTab('signin');
         setPassword('');
         return;
@@ -86,6 +91,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
       if (!res.ok) {
         setErrorMsg(res.error || 'Could not sign in');
+        if (res.needsConfirmation) setShowResend(true);
         return;
       }
       if (onClose) onClose();
@@ -104,6 +110,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 setTab('signin');
                 setErrorMsg('');
                 setInfoMsg('');
+                setShowResend(false);
               }}
               className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
                 tab === 'signin'
@@ -119,6 +126,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 setTab('signup');
                 setErrorMsg('');
                 setInfoMsg('');
+                setShowResend(false);
               }}
               className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
                 tab === 'signup'
@@ -145,6 +153,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <div className="mt-4 p-3 text-xs rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
             {infoMsg}
           </div>
+        )}
+
+        {showResend && (
+          <button
+            type="button"
+            onClick={async () => {
+              const r = await resendConfirmation(email);
+              if (r.ok) {
+                setErrorMsg('');
+                setInfoMsg('Confirmation email sent again. Check your inbox and spam folder.');
+              } else {
+                setErrorMsg(r.error || 'Could not resend the email');
+              }
+            }}
+            className="mt-2 text-xs font-semibold text-neutral-700 underline hover:text-neutral-950"
+          >
+            Resend confirmation email
+          </button>
         )}
 
         {/* Form Inputs matching Image 3 */}

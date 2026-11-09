@@ -191,12 +191,11 @@ interface AppContextType {
   signUp: (input: { name: string; email: string; phone: string; password: string }) => Promise<AuthResult>;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   staffSignIn: (email: string, password: string) => Promise<AuthResult>;
+  resendConfirmation: (email: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   createStaffAccount: (input: NewStaffInput) => Promise<AuthResult>;
   setStaffActive: (userId: string, active: boolean) => Promise<AuthResult>;
   refreshUsers: () => Promise<void>;
-  theme: 'light' | 'dark';
-  toggleTheme: () => void;
   services: ServiceItem[];
   updateServicePrice: (serviceId: string, newPrice: number) => Promise<ActionResult>;
   transactions: Transaction[];
@@ -267,12 +266,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAddFundsOpen, setIsAddFundsOpen] = useState(false);
   const [activeServiceForModal, setActiveServiceForModal] = useState<ServiceItem | null>(null);
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('wealthdatas_theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    return 'light';
-  });
-
   // Old builds kept the user, role, wallet, tickets and prices in localStorage. Remove all of it.
   useEffect(() => {
     [
@@ -284,12 +277,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ].forEach((k) => localStorage.removeItem(k));
   }, []);
 
+  // Light mode only: make sure no old dark setting is left behind
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
-    localStorage.setItem('wealthdatas_theme', theme);
-  }, [theme]);
+    document.documentElement.classList.remove('dark');
+    localStorage.removeItem('wealthdatas_theme');
+  }, []);
 
   const clearData = () => {
     setDbUsers([]);
@@ -453,7 +445,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       email: email.trim(),
       password,
       // The database trigger ALWAYS creates a USER profile with 0.00 balance, whatever is sent here.
-      options: { data: { name: name.trim(), phone: phone.trim() } },
+      options: {
+        data: { name: name.trim(), phone: phone.trim() },
+        emailRedirectTo: window.location.origin, // the confirmation link brings them back to your site
+      },
     });
     if (error) return { ok: false, error: error.message };
     if (data.user && data.user.identities && data.user.identities.length === 0) {
@@ -473,6 +468,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error || !data.user) {
         const msg = error?.message || 'Sign in failed';
+        if (/not confirmed/i.test(msg)) {
+          return {
+            ok: false,
+            needsConfirmation: true,
+            error: 'Please confirm your email first. Open the link we sent to your inbox (check spam too).',
+          };
+        }
         return { ok: false, error: msg === 'Invalid login credentials' ? 'Incorrect email or password.' : msg };
       }
 
@@ -505,6 +507,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const staffSignIn: AppContextType['staffSignIn'] = (email, password) =>
     signInWithPortal(email, password, 'staff');
 
+  const resendConfirmation: AppContextType['resendConfirmation'] = async (email) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
@@ -533,8 +545,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!profile) return [];
     return isStaff && dbUsers.length > 0 ? dbUsers : [profile];
   }, [profile, isStaff, dbUsers]);
-
-  const toggleTheme = () => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
 
   // ---- Money + tickets: every one of these runs a server-side database function ----
   const updateServicePrice: AppContextType['updateServicePrice'] = async (serviceId, newPrice) => {
@@ -697,12 +707,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         signUp,
         signIn,
         staffSignIn,
+        resendConfirmation,
         signOut,
         createStaffAccount,
         setStaffActive,
         refreshUsers: refreshData,
-        theme,
-        toggleTheme,
         services,
         updateServicePrice,
         transactions,

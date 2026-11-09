@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Menu, Globe, UserCheck, Shield } from 'lucide-react';
+import { Menu, Globe } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 interface TopBarProps {
@@ -15,7 +15,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenAuthModal,
   onToggleLanding,
 }) => {
-  const { theme, toggleTheme, currentUser } = useApp();
+  const { currentUser } = useApp();
 
   return (
     <header className="sticky top-0 z-30 h-16 px-4 md:px-8 liquid-glass border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between">
@@ -45,16 +45,6 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           <Globe className="w-3.5 h-3.5 text-neutral-400" />
           <span>3D Landing View</span>
-        </button>
-
-        {/* Dark/Light mode toggle */}
-        <button
-          type="button"
-          aria-label="Toggle color theme"
-          onClick={toggleTheme}
-          className="w-9 h-9 rounded-xl border border-neutral-200 dark:border-neutral-800 flex items-center justify-center text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition"
-        >
-          {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-neutral-700" />}
         </button>
 
         {/* User initials pill / login button matching Image 1 top right */}
