@@ -170,6 +170,9 @@ async function rpc(name: string, args: Record<string, unknown>): Promise<{ succe
   return { success: true, data };
 }
 
+// Where the confirmation email link sends people. On the live site set VITE_SITE_URL=https://www.wealthdatas.online
+const siteUrl = (((import.meta as any).env?.VITE_SITE_URL as string | undefined) || window.location.origin).replace(/\/+$/, '');
+
 export type AuthResult = { ok: boolean; error?: string; needsConfirmation?: boolean };
 type ActionResult = { success: boolean; error?: string };
 
@@ -447,10 +450,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // The database trigger ALWAYS creates a USER profile with 0.00 balance, whatever is sent here.
       options: {
         data: { name: name.trim(), phone: phone.trim() },
-        emailRedirectTo: window.location.origin, // the confirmation link brings them back to your site
+        emailRedirectTo: siteUrl, // the confirmation link brings them back to your site
       },
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      // The database refuses a second account for the same phone number or the same email inbox
+      if (/database error|unique|duplicate/i.test(error.message)) {
+        return { ok: false, error: 'An account already exists with this email or phone number. Please sign in instead.' };
+      }
+      return { ok: false, error: error.message };
+    }
     if (data.user && data.user.identities && data.user.identities.length === 0) {
       return { ok: false, error: 'An account with this email already exists. Please sign in.' };
     }
@@ -511,7 +520,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: siteUrl },
     });
     if (error) return { ok: false, error: error.message };
     return { ok: true };

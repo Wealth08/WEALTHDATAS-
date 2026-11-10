@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shield, User, Mail, Phone, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { validatePhone } from '../utils/rules';
@@ -6,9 +6,10 @@ import { validatePhone } from '../utils/rules';
 interface AuthModalProps {
   isOpen: boolean;
   onClose?: () => void;
+  defaultTab?: 'signin' | 'signup';
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultTab }) => {
   const { signUp, signIn, resendConfirmation } = useApp();
   const [tab, setTab] = useState<'signin' | 'signup'>('signup');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,7 +22,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showResend, setShowResend] = useState(false);
+  const [awaiting, setAwaiting] = useState<string | null>(null); // email waiting to be confirmed
+  const [cooldown, setCooldown] = useState(0);
+
+  // Open on the tab the app asks for (for example Sign in right after a confirmed email)
+  useEffect(() => {
+    if (isOpen && defaultTab) setTab(defaultTab);
+  }, [isOpen, defaultTab]);
+
+  // 60 second wait between "resend" clicks
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const handleResend = async () => {
+    if (!awaiting || cooldown > 0) return;
+    setErrorMsg('');
+    setInfoMsg('');
+    setLoading(true);
+    const r = await resendConfirmation(awaiting);
+    setLoading(false);
+    if (r.ok) {
+      setInfoMsg('Sent again. Check your inbox and your spam folder.');
+      setCooldown(60);
+    } else {
+      setErrorMsg(r.error || 'Could not resend the email. Please wait a minute and try again.');
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -42,7 +71,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     e.preventDefault();
     setErrorMsg('');
     setInfoMsg('');
-    setShowResend(false);
 
     if (tab === 'signup') {
       if (!fullName.trim()) {
@@ -53,7 +81,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         setErrorMsg('Please enter a valid email address');
         return;
       }
-      if (phone.trim() && !validatePhone(phone).valid) {
+      if (!validatePhone(phone).valid) {
         setErrorMsg('Enter a valid 11-digit Nigerian mobile number (e.g., 08012345678)');
         return;
       }
@@ -71,11 +99,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         return;
       }
       if (res.needsConfirmation) {
-        setInfoMsg(
-          `We sent a confirmation link to ${email.trim()}. Click it to activate your account, then sign in here.`
-        );
-        setShowResend(true);
-        setTab('signin');
+        setAwaiting(email.trim());
+        setCooldown(60);
         setPassword('');
         return;
       }
@@ -90,13 +115,80 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       setLoading(false);
 
       if (!res.ok) {
+        if (res.needsConfirmation) {
+          setAwaiting(email.trim());
+          setInfoMsg('Your email is not confirmed yet. Open the link we sent you.');
+          return;
+        }
         setErrorMsg(res.error || 'Could not sign in');
-        if (res.needsConfirmation) setShowResend(true);
         return;
       }
       if (onClose) onClose();
     }
   };
+
+  if (awaiting) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="relative w-full max-w-md overflow-hidden rounded-3xl liquid-glass-card shadow-2xl p-6 md:p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+            <Mail className="w-7 h-7" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-neutral-900 tracking-tight">Check your email</h3>
+            <p className="text-xs text-neutral-500 mt-2 max-w-xs mx-auto leading-relaxed">
+              We sent a confirmation link to{' '}
+              <span className="font-semibold text-neutral-900">{awaiting}</span>. Open your email and tap the
+              link to activate your account. If you cannot see it, check your spam folder.
+            </p>
+          </div>
+
+          {errorMsg && (
+            <div className="p-3 text-xs rounded-xl bg-red-50 text-red-600 border border-red-200">{errorMsg}</div>
+          )}
+          {infoMsg && (
+            <div className="p-3 text-xs rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {infoMsg}
+            </div>
+          )}
+
+          <button
+            type="button"
+            disabled={loading || cooldown > 0}
+            onClick={handleResend}
+            className="w-full py-3 px-4 rounded-xl bg-neutral-950 text-white font-semibold text-sm hover:opacity-90 active:scale-[0.99] transition shadow-md disabled:opacity-50"
+          >
+            {loading ? 'Sending...' : cooldown > 0 ? `Resend email in ${cooldown}s` : 'Resend confirmation email'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAwaiting(null);
+              setErrorMsg('');
+              setInfoMsg('');
+              setTab('signin');
+            }}
+            className="w-full py-2.5 px-4 rounded-xl border border-neutral-200 text-neutral-800 text-xs font-semibold hover:bg-neutral-100 transition"
+          >
+            I have confirmed my email - Sign in
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAwaiting(null);
+              setErrorMsg('');
+              setInfoMsg('');
+              setEmail('');
+              setTab('signup');
+            }}
+            className="text-xs text-neutral-500 underline hover:text-neutral-800"
+          >
+            Used the wrong email? Start again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
@@ -110,7 +202,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 setTab('signin');
                 setErrorMsg('');
                 setInfoMsg('');
-                setShowResend(false);
               }}
               className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
                 tab === 'signin'
@@ -126,7 +217,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 setTab('signup');
                 setErrorMsg('');
                 setInfoMsg('');
-                setShowResend(false);
               }}
               className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
                 tab === 'signup'
@@ -153,24 +243,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <div className="mt-4 p-3 text-xs rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
             {infoMsg}
           </div>
-        )}
-
-        {showResend && (
-          <button
-            type="button"
-            onClick={async () => {
-              const r = await resendConfirmation(email);
-              if (r.ok) {
-                setErrorMsg('');
-                setInfoMsg('Confirmation email sent again. Check your inbox and spam folder.');
-              } else {
-                setErrorMsg(r.error || 'Could not resend the email');
-              }
-            }}
-            className="mt-2 text-xs font-semibold text-neutral-700 underline hover:text-neutral-950"
-          >
-            Resend confirmation email
-          </button>
         )}
 
         {/* Form Inputs matching Image 3 */}
@@ -226,6 +298,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 </div>
                 <input
                   type="tel"
+                  required={tab === 'signup'}
                   placeholder="08012345678"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}

@@ -13,6 +13,7 @@ import { AuthModal } from './components/AuthModal';
 import { CreateTicketModal } from './components/CreateTicketModal';
 import { WhatsAppWidget } from './components/WhatsAppWidget';
 import { StaffLogin } from './components/StaffLogin';
+import { EmailConfirmed } from './components/EmailConfirmed';
 import { isStaffPath } from './utils/staffPath';
 import { ServiceItem } from './types';
 
@@ -37,6 +38,18 @@ function MainAppContent() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isCreateTicketOpen, setIsCreateTicketOpen] = useState<boolean>(false);
   const [path, setPath] = useState<string>(window.location.pathname);
+  const [preferSignIn, setPreferSignIn] = useState<boolean>(false);
+
+  // The email link brings people back here with the result in the address (after the # sign)
+  const [confirmNotice, setConfirmNotice] = useState<null | { status: 'success' | 'error'; message?: string }>(() => {
+    const h = window.location.hash;
+    if (/error_code=|error=/.test(h)) {
+      const desc = new URLSearchParams(h.replace(/^#/, '')).get('error_description');
+      return { status: 'error', message: desc ? desc.replace(/\+/g, ' ') : undefined };
+    }
+    if (/access_token=/.test(h) && /type=signup/.test(h)) return { status: 'success' };
+    return null;
+  });
 
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname);
@@ -105,6 +118,24 @@ function MainAppContent() {
     );
   }
 
+  if (confirmNotice) {
+    return (
+      <EmailConfirmed
+        status={confirmNotice.status}
+        message={confirmNotice.message}
+        signedIn={isAuthenticated}
+        onContinue={() => {
+          window.history.replaceState(null, '', window.location.pathname); // remove the long token from the address bar
+          setConfirmNotice(null);
+          if (!isAuthenticated) {
+            setPreferSignIn(true);
+            setIsAuthModalOpen(true);
+          }
+        }}
+      />
+    );
+  }
+
   // Secure staff entrance: https://your-site/staff-login
   if (isStaffLoginPath) {
     if (isAuthenticated && isStaff) {
@@ -131,6 +162,7 @@ function MainAppContent() {
         <AuthModal
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
+          defaultTab={preferSignIn ? 'signin' : undefined}
         />
       </>
     );
