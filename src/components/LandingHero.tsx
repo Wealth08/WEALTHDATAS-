@@ -12,26 +12,26 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ onEnterDashboard, onOp
   return (
     <div className="relative min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 flex flex-col justify-between overflow-hidden">
       {/* Top Navbar */}
-      <header className="relative z-20 flex items-center justify-between px-6 md:px-12 py-6 border-b border-neutral-100 dark:border-neutral-900">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-neutral-950 text-white dark:bg-white dark:text-neutral-950 flex items-center justify-center font-bold text-sm shadow-md">
+      <header className="relative z-20 flex items-center justify-between gap-3 px-4 sm:px-6 md:px-12 py-3 sm:py-6 border-b border-neutral-100 dark:border-neutral-900 bg-white/90 backdrop-blur">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-2xl bg-neutral-950 text-white dark:bg-white dark:text-neutral-950 flex items-center justify-center font-bold text-sm shadow-md">
             W
           </div>
-          <span className="text-lg font-extrabold tracking-tight text-neutral-950 dark:text-white">
+          <span className="text-base sm:text-lg font-extrabold tracking-tight text-neutral-950 dark:text-white truncate">
             Wealthdatas
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             onClick={onOpenAuth}
-            className="px-4 py-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300 hover:text-neutral-950 dark:hover:text-white transition"
+            className="whitespace-nowrap px-5 py-2 rounded-full bg-neutral-950 text-white text-xs font-semibold shadow-sm active:scale-95 transition sm:bg-transparent sm:text-neutral-600 sm:shadow-none sm:px-4 sm:hover:text-neutral-950"
           >
             Sign In
           </button>
           <button
             onClick={onEnterDashboard}
-            className="px-5 py-2.5 rounded-full bg-neutral-950 text-white dark:bg-white dark:text-neutral-950 text-xs font-semibold hover:opacity-90 active:scale-95 transition shadow-sm flex items-center gap-1.5"
+            className="hidden sm:flex whitespace-nowrap px-5 py-2.5 rounded-full bg-neutral-950 text-white dark:bg-white dark:text-neutral-950 text-xs font-semibold hover:opacity-90 active:scale-95 transition shadow-sm items-center gap-1.5"
           >
             Launch Portal
             <ArrowRight className="w-3.5 h-3.5" />
