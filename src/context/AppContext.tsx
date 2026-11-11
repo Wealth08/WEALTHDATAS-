@@ -153,6 +153,10 @@ async function fetchProfile(userId: string): Promise<UserProfile | null> {
 }
 
 async function functionErrorMessage(error: any): Promise<string> {
+  // The function could not be reached at all (not deployed yet, or no internet)
+  if (error?.name === 'FunctionsFetchError' || /failed to send a request/i.test(error?.message || '')) {
+    return 'This service is temporarily unavailable. You have not been charged. Please try again shortly.';
+  }
   try {
     const body = await error?.context?.json?.();
     if (body?.error) return String(body.error);
@@ -226,6 +230,7 @@ interface AppContextType {
     note: string;
   }) => Promise<ActionResult & { reference?: string }>;
   reviewFundingRequest: (id: string, approve: boolean, amountReceived?: number, note?: string) => Promise<ActionResult>;
+  cancelFundingRequest: (id: string) => Promise<ActionResult>;
   setPaymentAccount: (input: PaymentAccount) => Promise<ActionResult>;
   serviceCosts: Record<string, number>;
   setServiceCost: (serviceId: string, cost: number) => Promise<ActionResult>;
@@ -686,6 +691,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: res.success, error: res.error };
   };
 
+  const cancelFundingRequest: AppContextType['cancelFundingRequest'] = async (id) => {
+    const res = await rpc('cancel_funding_request', { p_id: id });
+    await refreshData();
+    return { success: res.success, error: res.error };
+  };
+
   const setPaymentAccount: AppContextType['setPaymentAccount'] = async (acc) => {
     const res = await rpc('admin_set_payment_account', {
       p_bank: acc.bank,
@@ -734,6 +745,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fundingRequests,
         createFundingRequest,
         reviewFundingRequest,
+        cancelFundingRequest,
         setPaymentAccount,
         serviceCosts,
         setServiceCost,

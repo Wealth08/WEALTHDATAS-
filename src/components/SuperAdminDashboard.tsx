@@ -909,7 +909,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     <div key={r.id} className="flex items-center justify-between text-[11px] text-neutral-500">
                       <span className="font-mono">{r.reference} - {r.userName}</span>
                       <span>
-                        {r.status === 'APPROVED' ? `Credited ${formatNaira(r.amountCredited || 0)}` : 'Rejected'}
+                        {r.status === 'APPROVED' ? `Credited ${formatNaira(r.amountCredited || 0)}` : r.status === 'CANCELLED' ? 'Cancelled by customer' : 'Rejected'}
                       </span>
                     </div>
                   ))}

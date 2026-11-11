@@ -113,7 +113,7 @@ export interface FundingRequest {
   bank?: string;
   note?: string;
   reference: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   amountCredited?: number;
   reviewNote?: string;
   createdAt: string;

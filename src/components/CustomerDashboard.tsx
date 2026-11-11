@@ -35,7 +35,8 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   onOpenAddFunds,
   activeCategoryFilter = 'ALL',
 }) => {
-  const { currentUser, services, transactions, recentVerifications, paymentAccount } = useApp();
+  const { currentUser, services, transactions, recentVerifications, paymentAccount, fundingRequests } = useApp();
+  const waitingPayment = fundingRequests.find((r) => r.userId === currentUser.id && r.status === 'PENDING');
   const [copiedDVA, setCopiedDVA] = useState(false);
   const [displayBalance, setDisplayBalance] = useState(currentUser.walletBalance);
 
@@ -125,6 +126,19 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {waitingPayment && (
+        <button
+          type="button"
+          onClick={onOpenAddFunds}
+          className="w-full text-left p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-3 text-xs"
+        >
+          <span className="font-semibold text-amber-900">
+            Your payment of {formatNaira(waitingPayment.amount)} is waiting for confirmation
+          </span>
+          <span className="font-semibold text-amber-700">View</span>
+        </button>
+      )}
 
       {/* Dedicated Virtual Account (DVA) Bar */}
       <div className="p-4 md:p-5 rounded-2xl bg-neutral-50 dark:bg-neutral-900/70 border border-neutral-200/80 dark:border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
