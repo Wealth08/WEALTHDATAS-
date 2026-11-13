@@ -52,7 +52,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ onEnterDashboard, onOp
         </h1>
 
         <p className="mt-4 text-base sm:text-lg text-neutral-500 dark:text-neutral-400 max-w-xl font-medium tracking-tight">
-          Nigeria's premier identity & verification infrastructure. Instant NIMC NIN slips, NIBSS BVN retrieval, IPE clearance queues, and automated dedicated virtual accounts.
+          Nigeria's premier identity & verification infrastructure. Instant NIMC NIN slips, NIBSS BVN retrieval, IPE clearance queues, and simple wallet funding by bank transfer.
         </p>
 
         {/* Primary Action Button inspired by Image 2's high-contrast pill button */}

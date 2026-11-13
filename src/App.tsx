@@ -14,6 +14,7 @@ import { CreateTicketModal } from './components/CreateTicketModal';
 import { WhatsAppWidget } from './components/WhatsAppWidget';
 import { StaffLogin } from './components/StaffLogin';
 import { EmailConfirmed } from './components/EmailConfirmed';
+import { supabase } from './lib/supabase';
 import { isStaffPath } from './utils/staffPath';
 import { ServiceItem } from './types';
 
@@ -26,7 +27,8 @@ function MainAppContent() {
     setActiveServiceForModal,
     services,
     isAuthenticated,
-    authLoading
+    authLoading,
+    signOut
   } = useApp();
 
   const isStaff = currentUser.role === 'SUPPORT_ADMIN' || currentUser.role === 'SUPER_ADMIN';
@@ -41,7 +43,15 @@ function MainAppContent() {
   const [preferSignIn, setPreferSignIn] = useState<boolean>(false);
 
   // The email link brings people back here with the result in the address (after the # sign)
-  const [confirmNotice, setConfirmNotice] = useState<null | { status: 'success' | 'error'; message?: string }>(() => {
+  type Notice = { status: 'verifying' | 'success' | 'error'; message?: string };
+  const [confirmNotice, setConfirmNotice] = useState<Notice | null>(() => {
+    // New style link: https://your-site/auth/confirm?token_hash=...&type=signup  (we verify it ourselves)
+    if (
+      window.location.pathname.replace(/\/+$/, '') === '/auth/confirm' &&
+      /token_hash=/.test(window.location.search)
+    ) {
+      return { status: 'verifying' };
+    }
     const h = window.location.hash;
     if (/error_code=|error=/.test(h)) {
       const desc = new URLSearchParams(h.replace(/^#/, '')).get('error_description');
@@ -50,6 +60,31 @@ function MainAppContent() {
     if (/access_token=/.test(h) && /type=signup/.test(h)) return { status: 'success' };
     return null;
   });
+
+  // Verify the email link, then make them log in (we do not keep them signed in from the email link)
+  useEffect(() => {
+    if (confirmNotice?.status !== 'verifying') return;
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get('token_hash') || '';
+    const type = (params.get('type') || 'signup') as 'signup' | 'email' | 'invite' | 'magiclink' | 'recovery' | 'email_change';
+    supabase.auth.verifyOtp({ token_hash: tokenHash, type }).then(async ({ error }) => {
+      if (error) {
+        setConfirmNotice({
+          status: 'error',
+          message: 'This link has expired or was already used. Sign in and choose "Resend confirmation email" to get a new one.',
+        });
+        return;
+      }
+      await supabase.auth.signOut();
+      setConfirmNotice({ status: 'success' });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Older style link (token after the # sign): sign them out so they log in themselves
+  useEffect(() => {
+    if (confirmNotice?.status === 'success' && isAuthenticated) signOut();
+  }, [confirmNotice?.status, isAuthenticated]);
 
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname);
@@ -110,7 +145,7 @@ function MainAppContent() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading && !confirmNotice) {
     return (
       <div className="min-h-screen bg-white dark:bg-[#050505] text-neutral-500 flex items-center justify-center text-xs font-medium">
         Loading...
@@ -123,14 +158,13 @@ function MainAppContent() {
       <EmailConfirmed
         status={confirmNotice.status}
         message={confirmNotice.message}
-        signedIn={isAuthenticated}
-        onContinue={() => {
-          window.history.replaceState(null, '', window.location.pathname); // remove the long token from the address bar
+        onContinue={async () => {
+          if (isAuthenticated) await signOut();
+          window.history.replaceState(null, '', '/'); // clear the long address
+          setPath('/');
           setConfirmNotice(null);
-          if (!isAuthenticated) {
-            setPreferSignIn(true);
-            setIsAuthModalOpen(true);
-          }
+          setPreferSignIn(true);
+          setIsAuthModalOpen(true);
         }}
       />
     );

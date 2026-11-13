@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Search, FileText, CheckCircle2, AlertTriangle, Download, ArrowRight, Loader2, Upload, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ServiceItem, VerificationResult } from '../types';
 import { formatNaira, validateNIN, validateBVN, validatePhone } from '../utils/rules';
 import { downloadBase64Pdf } from '../utils/downloadPdf';
+import { familyOf } from '../utils/slipTypes';
 
 // Services that run through the provider (server-side). Everything else keeps the manual ticket flow.
 const PROVIDER_ASYNC = ['bvn-retrieval', 'ipe-clearance', 'nin-personalization'];
@@ -13,8 +14,8 @@ interface ServiceModalProps {
   onClose: () => void;
 }
 
-export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) => {
-  const { currentUser, runService, submitServiceTicket, setIsAddFundsOpen } = useApp();
+export const ServiceModal: React.FC<ServiceModalProps> = ({ service: baseService, onClose }) => {
+  const { currentUser, runService, submitServiceTicket, setIsAddFundsOpen, services } = useApp();
 
   // Instant query state
   const [queryInput, setQueryInput] = useState('');
@@ -30,7 +31,19 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
   const [isSubmittedTicket, setIsSubmittedTicket] = useState(false);
   const [submittedTicketNumber, setSubmittedTicketNumber] = useState('');
 
-  if (!service) return null;
+  // Slip type chosen inside the window (Regular / Standard / Premium / V-NIN) and the consent tick
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
+  useEffect(() => {
+    setPickedId(null);
+    setConsent(false);
+  }, [baseService?.id]);
+
+  if (!baseService) return null;
+
+  const family = familyOf(baseService.id);
+  const tiers = family ? family.tiers.filter((t) => services.some((sv) => sv.id === t.id)) : [];
+  const service = (pickedId && services.find((sv) => sv.id === pickedId)) || baseService;
 
   const isInstant = service.type === 'instant';
 
@@ -38,6 +51,11 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
   const handleInstantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+
+    if (!consent) {
+      setErrorMsg('Please tick the consent box first.');
+      return;
+    }
 
     // Input validation based on service type
     const isPhoneSearch = service.id.includes('phone');
@@ -232,7 +250,8 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
         {isInstant && !result && (
           <form onSubmit={handleInstantSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+              <label className="flex items-center gap-2 text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 text-xs font-bold flex items-center justify-center shrink-0">1</span>
                 {service.id.includes('phone')
                   ? 'Enter Registered Mobile Phone Number'
                   : service.category === 'BVN'
@@ -261,9 +280,63 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({ service, onClose }) 
               </p>
             </div>
 
+            {tiers.length > 1 && (
+              <div>
+                <p className="flex items-center gap-2 text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-2">
+                  <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 text-xs font-bold flex items-center justify-center shrink-0">2</span>
+                  Select Your Preferred Slip Type
+                </p>
+                <div className={`grid gap-2 ${tiers.length >= 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+                  {tiers.map((t) => {
+                    const tierService = services.find((sv) => sv.id === t.id);
+                    const selected = service.id === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setPickedId(t.id)}
+                        className={`p-3 rounded-2xl border text-center transition flex flex-col items-center gap-2 ${
+                          selected
+                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                            : 'border-neutral-200 bg-white hover:border-neutral-400'
+                        }`}
+                      >
+                        <span className="text-xs font-mono font-bold text-neutral-950 tabular-nums">
+                          {formatNaira(tierService ? tierService.price : 0)}
+                        </span>
+                        <img
+                          src={t.image}
+                          alt=""
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                          className="h-14 w-full object-contain"
+                        />
+                        <span className="text-[11px] font-semibold text-neutral-800">{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <label className="flex items-start gap-3 p-4 rounded-2xl bg-blue-50/70 border border-blue-100 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="mt-0.5 w-4 h-4 shrink-0 accent-blue-600"
+              />
+              <span className="text-xs text-neutral-700 leading-relaxed">
+                By checking this box, you agree that the owner of the ID has granted you consent to verify his/her
+                identity in accordance with regulatory laws.
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={isProcessing}
+              disabled={isProcessing || !consent}
               className="w-full py-3.5 px-4 rounded-xl bg-neutral-950 text-white dark:bg-white dark:text-black font-semibold text-sm hover:opacity-90 active:scale-[0.99] transition shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isProcessing ? (

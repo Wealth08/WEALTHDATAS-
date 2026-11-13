@@ -343,22 +343,22 @@ export const SuperAdminDashboard: React.FC = () => {
                 Net Service Revenue
               </span>
               <p className="text-2xl font-mono font-bold text-neutral-950 dark:text-white tabular-nums">
-                {formatNaira(netRevenue + 128400)}
+                {formatNaira(netRevenue)}
               </p>
               <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-1">
                 <TrendingUp className="w-3.5 h-3.5" />
-                +18.4% month-over-month
+                Sales minus refunds
               </div>
             </div>
 
             <div className="p-5 rounded-3xl liquid-glass-card">
               <span className="text-[11px] uppercase tracking-wider text-neutral-400 font-semibold block mb-1">
-                Total Inflow (DVA & Cards)
+                Total Inflow (Bank Transfers)
               </span>
               <p className="text-2xl font-mono font-bold text-neutral-950 dark:text-white tabular-nums">
-                {formatNaira(totalFunded + 540000)}
+                {formatNaira(totalFunded)}
               </p>
-              <span className="text-[11px] text-neutral-400 block mt-1">Automated Monnify / Paystack Webhooks</span>
+              <span className="text-[11px] text-neutral-400 block mt-1">Payments you confirmed and credited</span>
             </div>
 
             <div className="p-5 rounded-3xl liquid-glass-card">
@@ -366,7 +366,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 Total System Users
               </span>
               <p className="text-2xl font-mono font-bold text-neutral-950 dark:text-white tabular-nums">
-                {allUsers.length + 184}
+                {allUsers.length}
               </p>
               <span className="text-[11px] text-neutral-400 block mt-1">Cybercafe agents & retail customers</span>
             </div>
@@ -668,7 +668,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 Immutable Financial & Audit Ledger
               </h3>
               <p className="text-xs text-neutral-500">
-                Complete trace of all automated debits, virtual account inflows, and admin balance overrides.
+                Complete trace of all service debits, bank transfer funding, refunds, and admin balance overrides.
               </p>
             </div>
           </div>

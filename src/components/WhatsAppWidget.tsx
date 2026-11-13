@@ -2,21 +2,31 @@ import React, { useState } from 'react';
 import { MessageCircle, X, Send, PhoneCall, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
+// Customers chat with you on this WhatsApp number (international format, no + and no leading 0)
+const WHATSAPP_NUMBER = '2348148449539';
+
 export const WhatsAppWidget: React.FC = () => {
   const { currentUser } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [sent, setSent] = useState(false);
 
+  const openWhatsApp = (text: string) => {
+    const intro = `Hello Wealthdatas, I am ${currentUser.name}${currentUser.email ? ` (${currentUser.email})` : ''}.`;
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`${intro} ${text}`.trim())}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
+    openWhatsApp(message.trim());
     setSent(true);
     setTimeout(() => {
       setMessage('');
       setSent(false);
       setIsOpen(false);
-    }, 2000);
+    }, 2500);
   };
 
   return (
@@ -43,10 +53,10 @@ export const WhatsAppWidget: React.FC = () => {
                 WD
               </div>
               <div>
-                <h4 className="text-xs font-bold leading-tight">Wealthdatas Live Desk</h4>
+                <h4 className="text-xs font-bold leading-tight">Wealthdatas Support</h4>
                 <p className="text-[10px] text-emerald-200 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  Typically replies within 2 minutes
+                  Chat with us on WhatsApp
                 </p>
               </div>
             </div>
@@ -62,14 +72,14 @@ export const WhatsAppWidget: React.FC = () => {
           <div className="p-4 bg-neutral-50 dark:bg-neutral-900/90 text-xs space-y-3 min-h-[160px]">
             <div className="p-3 rounded-2xl rounded-tl-sm bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 shadow-sm max-w-[85%] border border-neutral-200/60 dark:border-neutral-700/60">
               <p className="font-semibold text-[11px] text-emerald-600 dark:text-emerald-400 mb-0.5">
-                Support Agent (Chukwuma)
+                Wealthdatas Support
               </p>
               Hello {currentUser.name}! How can we assist you with your NIN, BVN, or IPE Clearance today?
             </div>
 
             {sent && (
               <div className="p-3 rounded-2xl rounded-tr-sm bg-[#DCF8C6] dark:bg-emerald-950 text-neutral-900 dark:text-emerald-100 ml-auto max-w-[85%] text-right font-medium">
-                Message transmitted to WhatsApp Live Desk! An agent is connecting...
+                Opening WhatsApp with your message...
               </div>
             )}
           </div>

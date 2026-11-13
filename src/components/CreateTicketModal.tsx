@@ -107,7 +107,7 @@ export const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ isOpen, on
                   className="w-full p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs"
                 >
                   <option value="SUPPORT_INQUIRY">General Inquiry</option>
-                  <option value="FUNDING_ISSUE">Funding / DVA Issue</option>
+                  <option value="FUNDING_ISSUE">Funding / Payment Issue</option>
                   <option value="SERVICE_REQUEST">Service Assistance</option>
                 </select>
               </div>
